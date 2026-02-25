@@ -4,7 +4,6 @@ import folium
 from streamlit_folium import st_folium
 
 st.set_page_config(layout="wide")
-
 st.title("Pune District Rural Road Connectivity Dashboard")
 
 # =====================================================
@@ -19,7 +18,6 @@ def load_data():
     block = gpd.read_file("Pune_Taluka_Web.geojson")
     pwd = gpd.read_file("Pune_PWD_Web.geojson")
 
-    # Fix truncated shapefile column
     if "Scheme_Typ" in roads.columns:
         roads = roads.rename(columns={"Scheme_Typ": "Scheme_Type"})
 
@@ -29,12 +27,11 @@ def load_data():
 roads, hab, block, pwd = load_data()
 
 # =====================================================
-# SIDEBAR FILTERS (CASCADE)
+# SIDEBAR FILTERS
 # =====================================================
 
 st.sidebar.header("Filters")
 
-# 1️⃣ TALUKA
 selected_taluka = st.sidebar.selectbox(
     "Select Taluka",
     sorted(roads["THENAME"].dropna().unique())
@@ -42,7 +39,6 @@ selected_taluka = st.sidebar.selectbox(
 
 roads_taluka = roads[roads["THENAME"] == selected_taluka]
 
-# 2️⃣ SCHEME
 selected_scheme = st.sidebar.multiselect(
     "Select Scheme",
     sorted(roads_taluka["Scheme_Type"].dropna().unique()),
@@ -53,9 +49,8 @@ roads_scheme = roads_taluka[
     roads_taluka["Scheme_Type"].isin(selected_scheme)
 ]
 
-# 3️⃣ CONNECTIVITY (NH/SH/MDR/ODR)
 selected_connectivity = st.sidebar.multiselect(
-    "Starts From",
+    "Starts From (NH / SH / MDR / ODR)",
     sorted(roads_scheme["Start_From"].dropna().unique()),
     default=roads_scheme["Start_From"].dropna().unique()
 )
@@ -65,7 +60,7 @@ filtered_roads = roads_scheme[
 ]
 
 # =====================================================
-# CREATE MAP
+# MAP
 # =====================================================
 
 m = folium.Map(
@@ -74,15 +69,7 @@ m = folium.Map(
     control_scale=True
 )
 
-# Google Satellite
-folium.TileLayer(
-    tiles="https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-    attr="Google",
-    name="Google Satellite",
-    subdomains=["mt0", "mt1", "mt2", "mt3"],
-).add_to(m)
-
-# Google Maps
+# Base Layers
 folium.TileLayer(
     tiles="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
     attr="Google",
@@ -90,24 +77,32 @@ folium.TileLayer(
     subdomains=["mt0", "mt1", "mt2", "mt3"],
 ).add_to(m)
 
+folium.TileLayer(
+    tiles="https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+    attr="Google",
+    name="Google Satellite",
+    subdomains=["mt0", "mt1", "mt2", "mt3"],
+).add_to(m)
+
 # =====================================================
-# ADD TALUKA BOUNDARY
+# TALUKA BOUNDARY (TOGGLEABLE)
 # =====================================================
 
 selected_block = block[block["THENAME"] == selected_taluka]
 
 folium.GeoJson(
     selected_block,
-    name="Selected Taluka",
+    name="Taluka Boundary",
     style_function=lambda x: {
         "color": "black",
         "weight": 2,
         "fillOpacity": 0
-    }
+    },
+    show=True
 ).add_to(m)
 
 # =====================================================
-# ADD NH / SH / MDR BASE NETWORK
+# PWD NETWORK (NH / SH / MDR)
 # =====================================================
 
 def pwd_style(feature):
@@ -129,11 +124,12 @@ folium.GeoJson(
     tooltip=folium.GeoJsonTooltip(
         fields=["DP_NEW"],
         aliases=["Road Number"]
-    )
+    ),
+    show=False
 ).add_to(m)
 
 # =====================================================
-# STYLE FUNCTION FOR RURAL ROADS
+# FILTERED RURAL ROADS
 # =====================================================
 
 def rural_style(feature):
@@ -148,10 +144,6 @@ def rural_style(feature):
     else:
         return {"color": "gray", "weight": 2}
 
-# =====================================================
-# ADD FILTERED RURAL ROADS
-# =====================================================
-
 folium.GeoJson(
     filtered_roads,
     name="Filtered Rural Roads",
@@ -159,11 +151,12 @@ folium.GeoJson(
     tooltip=folium.GeoJsonTooltip(
         fields=["Name", "Scheme_Type", "Start_From", "Connected_", "Connecte_1"],
         aliases=["Road Name", "Scheme", "Starts From", "Habitation", "Population"]
-    )
+    ),
+    show=True
 ).add_to(m)
 
 # =====================================================
-# ADD HABITATION LAYER (ONLY SELECTED TALUKA)
+# HABITATION LAYER
 # =====================================================
 
 if "THENAME" in hab.columns:
@@ -178,14 +171,15 @@ folium.GeoJson(
     tooltip=folium.GeoJsonTooltip(
         fields=["HAB_NAME", "TOT_POPULA"],
         aliases=["Habitation", "Population"]
-    )
+    ),
+    show=False
 ).add_to(m)
 
 # =====================================================
-# LAYER CONTROL
+# LAYER CONTROL (ON / OFF)
 # =====================================================
 
-folium.LayerControl().add_to(m)
+folium.LayerControl(collapsed=False).add_to(m)
 
 # =====================================================
 # DISPLAY MAP
@@ -194,7 +188,7 @@ folium.LayerControl().add_to(m)
 st_folium(m, width=1400, height=700)
 
 # =====================================================
-# SUMMARY PANEL
+# SUMMARY
 # =====================================================
 
 st.subheader("Summary")
@@ -204,9 +198,6 @@ col1, col2 = st.columns(2)
 col1.metric("Total Roads", len(filtered_roads))
 
 if "Connecte_1" in filtered_roads.columns:
-    col2.metric(
-        "Total Population Connected",
-        int(filtered_roads["Connecte_1"].sum())
-    )
+    col2.metric("Total Population Connected", int(filtered_roads["Connecte_1"].sum()))
 else:
     col2.metric("Total Population Connected", 0)
