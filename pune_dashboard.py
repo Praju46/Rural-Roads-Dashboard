@@ -7,10 +7,8 @@ st.set_page_config(layout="wide")
 
 st.title("Pune District Rural Road Connectivity Dashboard")
 
-import os
-
 # =====================================================
-# LOAD DATA (FILES IN ROOT FOLDER)
+# LOAD DATA
 # =====================================================
 
 @st.cache_data
@@ -19,6 +17,10 @@ def load_data():
     roads = gpd.read_file("Pune_Roads_Web.geojson")
     hab = gpd.read_file("Pune_Hab_Web.geojson")
     block = gpd.read_file("Pune_Taluka_Web.geojson")
+
+    # Fix truncated shapefile column name
+    if "Scheme_Typ" in roads.columns:
+        roads = roads.rename(columns={"Scheme_Typ": "Scheme_Type"})
 
     return roads, hab, block
 
@@ -53,81 +55,88 @@ filtered_roads = roads[
 # =====================================================
 
 m = folium.Map(
-    location=[18.52, 73.85],
+    location=[18.5204, 73.8567],
     zoom_start=9,
-    tiles=None
+    control_scale=True
 )
 
-# Basemaps
-folium.TileLayer("OpenStreetMap", name="OpenStreetMap").add_to(m)
-folium.TileLayer("CartoDB positron", name="Light Map").add_to(m)
+# Google Satellite Layer
 folium.TileLayer(
-    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attr="ESRI Satellite",
-    name="Satellite",
+    tiles="https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+    attr="Google",
+    name="Google Satellite",
+    subdomains=["mt0", "mt1", "mt2", "mt3"],
+    overlay=False,
+    control=True
+).add_to(m)
+
+# Google Maps Layer
+folium.TileLayer(
+    tiles="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+    attr="Google",
+    name="Google Maps",
+    subdomains=["mt0", "mt1", "mt2", "mt3"],
+    overlay=False,
+    control=True
 ).add_to(m)
 
 # =====================================================
-# ADD ROADS
+# STYLE FUNCTION FOR ROADS
 # =====================================================
 
-def road_style(feature):
-    scheme = feature["properties"]["Scheme_Type"]
+def style_function(feature):
+    scheme = feature["properties"].get("Scheme_Type", "")
+
     if scheme == "PMGSY":
         return {"color": "blue", "weight": 3}
     elif scheme == "MMGSY":
         return {"color": "green", "weight": 3}
     elif scheme == "Proposed":
-        return {"color": "orange", "weight": 3}
+        return {"color": "red", "weight": 3}
     else:
         return {"color": "gray", "weight": 2}
 
-folium.GeoJson(
-    filtered_roads,
-    name="Roads",
-    style_function=road_style,
-    tooltip=folium.GeoJsonTooltip(
-        fields=["Connected_Habs", "Connected_Pop", "Scheme_Type"],
-        aliases=["Habitation", "Population", "Scheme"]
-    )
-).add_to(m)
-
 # =====================================================
-# ADD HABITATIONS
+# ADD LAYERS
 # =====================================================
 
-for _, row in hab.iterrows():
-    folium.CircleMarker(
-        location=[row.geometry.y, row.geometry.x],
-        radius=4,
-        popup=f"{row['HAB_NAME']}<br>Population: {row['TOT_POPULA']}",
-        color="red",
-        fill=True,
-    ).add_to(m)
-
-# =====================================================
-# ADD TALUKA BOUNDARY
-# =====================================================
-
+# Taluka Boundary
 folium.GeoJson(
     block,
     name="Taluka Boundary",
-    style_function=lambda x: {"color": "black", "weight": 1, "fillOpacity": 0}
+    style_function=lambda x: {
+        "color": "black",
+        "weight": 1,
+        "fillOpacity": 0
+    }
 ).add_to(m)
 
-# Layer control
+# Roads
+folium.GeoJson(
+    filtered_roads,
+    name="Roads",
+    style_function=style_function,
+    tooltip=folium.GeoJsonTooltip(
+        fields=["Name", "Scheme_Type", "Start_From", "Connected_", "Connecte_1"],
+        aliases=["Road Name", "Scheme", "Connected To", "Habitation", "Population"]
+    )
+).add_to(m)
+
+# Habitations
+folium.GeoJson(
+    hab,
+    name="Habitations",
+    marker=folium.CircleMarker(radius=4, color="orange", fill=True),
+    tooltip=folium.GeoJsonTooltip(
+        fields=["HAB_NAME", "TOT_POPULA"],
+        aliases=["Habitation", "Population"]
+    )
+).add_to(m)
+
 folium.LayerControl().add_to(m)
 
-# Display map
+# =====================================================
+# DISPLAY MAP
+# =====================================================
+
 st_folium(m, width=1400, height=700)
-
-# =====================================================
-# SUMMARY STATS
-# =====================================================
-
-st.subheader("Summary Statistics")
-
-col1, col2 = st.columns(2)
-
-col1.metric("Total Roads", len(filtered_roads))
-col2.metric("Total Population Connected", int(filtered_roads["Connected_Pop"].sum()))
