@@ -28,26 +28,39 @@ def load_data():
 roads, hab, block = load_data()
 
 # =====================================================
-# SIDEBAR FILTERS
+# SIDEBAR FILTERS (CASCADE STYLE)
 # =====================================================
 
 st.sidebar.header("Filters")
 
+# 1️⃣ TALUKA FIRST
+selected_taluka = st.sidebar.selectbox(
+    "Select Taluka",
+    sorted(roads["THENAME"].dropna().unique())
+)
+
+roads_taluka = roads[roads["THENAME"] == selected_taluka]
+
+# 2️⃣ SCHEME BASED ON TALUKA
 selected_scheme = st.sidebar.multiselect(
     "Select Scheme",
-    roads["Scheme_Type"].unique(),
-    default=roads["Scheme_Type"].unique()
+    sorted(roads_taluka["Scheme_Type"].dropna().unique()),
+    default=roads_taluka["Scheme_Type"].dropna().unique()
 )
 
-selected_taluka = st.sidebar.multiselect(
-    "Select Taluka",
-    roads["THENAME"].unique(),
-    default=roads["THENAME"].unique()
+roads_scheme = roads_taluka[
+    roads_taluka["Scheme_Type"].isin(selected_scheme)
+]
+
+# 3️⃣ CONNECTIVITY FILTER (NH / SH / MDR / ODR)
+selected_connectivity = st.sidebar.multiselect(
+    "Starts From",
+    sorted(roads_scheme["Start_From"].dropna().unique()),
+    default=roads_scheme["Start_From"].dropna().unique()
 )
 
-filtered_roads = roads[
-    (roads["Scheme_Type"].isin(selected_scheme)) &
-    (roads["THENAME"].isin(selected_taluka))
+filtered_roads = roads_scheme[
+    roads_scheme["Start_From"].isin(selected_connectivity)
 ]
 
 # =====================================================
@@ -56,32 +69,28 @@ filtered_roads = roads[
 
 m = folium.Map(
     location=[18.5204, 73.8567],
-    zoom_start=9,
+    zoom_start=10,
     control_scale=True
 )
 
-# Google Satellite Layer
+# Google Satellite
 folium.TileLayer(
     tiles="https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
     attr="Google",
     name="Google Satellite",
     subdomains=["mt0", "mt1", "mt2", "mt3"],
-    overlay=False,
-    control=True
 ).add_to(m)
 
-# Google Maps Layer
+# Google Maps
 folium.TileLayer(
     tiles="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
     attr="Google",
     name="Google Maps",
     subdomains=["mt0", "mt1", "mt2", "mt3"],
-    overlay=False,
-    control=True
 ).add_to(m)
 
 # =====================================================
-# STYLE FUNCTION FOR ROADS
+# ROAD STYLE
 # =====================================================
 
 def style_function(feature):
@@ -97,41 +106,38 @@ def style_function(feature):
         return {"color": "gray", "weight": 2}
 
 # =====================================================
-# ADD LAYERS
+# ADD TALUKA BOUNDARY
 # =====================================================
 
-# Taluka Boundary
+selected_block = block[block["THENAME"] == selected_taluka]
+
 folium.GeoJson(
-    block,
-    name="Taluka Boundary",
+    selected_block,
+    name="Selected Taluka",
     style_function=lambda x: {
         "color": "black",
-        "weight": 1,
+        "weight": 2,
         "fillOpacity": 0
     }
 ).add_to(m)
 
-# Roads
+# =====================================================
+# ADD FILTERED ROADS
+# =====================================================
+
 folium.GeoJson(
     filtered_roads,
-    name="Roads",
+    name="Filtered Roads",
     style_function=style_function,
     tooltip=folium.GeoJsonTooltip(
         fields=["Name", "Scheme_Type", "Start_From", "Connected_", "Connecte_1"],
-        aliases=["Road Name", "Scheme", "Connected To", "Habitation", "Population"]
+        aliases=["Road Name", "Scheme", "Starts From", "Habitation", "Population"]
     )
 ).add_to(m)
 
-# Habitations
-folium.GeoJson(
-    hab,
-    name="Habitations",
-    marker=folium.CircleMarker(radius=4, color="orange", fill=True),
-    tooltip=folium.GeoJsonTooltip(
-        fields=["HAB_NAME", "TOT_POPULA"],
-        aliases=["Habitation", "Population"]
-    )
-).add_to(m)
+# =====================================================
+# LAYER CONTROL
+# =====================================================
 
 folium.LayerControl().add_to(m)
 
@@ -140,3 +146,17 @@ folium.LayerControl().add_to(m)
 # =====================================================
 
 st_folium(m, width=1400, height=700)
+
+# =====================================================
+# SUMMARY PANEL
+# =====================================================
+
+st.subheader("Summary")
+
+col1, col2 = st.columns(2)
+
+col1.metric("Total Roads", len(filtered_roads))
+col2.metric(
+    "Total Population Connected",
+    int(filtered_roads["Connecte_1"].sum()) if "Connecte_1" in filtered_roads.columns else 0
+)
