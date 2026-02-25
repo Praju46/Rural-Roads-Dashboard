@@ -9,22 +9,23 @@ st.title("Pune District Rural Road Connectivity Dashboard")
 
 import os
 
-
 # =====================================================
-# LOAD DATA (WEB OPTIMIZED GEOJSON)
+# LOAD DATA (FILES IN ROOT FOLDER)
 # =====================================================
 
 @st.cache_data
 def load_data():
 
-    roads = gpd.read_file("Data/Pune_Roads_Web.geojson")
-    hab = gpd.read_file("Data/Pune_Hab_Web.geojson")
-    block = gpd.read_file("Data/Pune_Taluka_Web.geojson")
+    roads = gpd.read_file("Pune_Roads_Web.geojson")
+    hab = gpd.read_file("Pune_Hab_Web.geojson")
+    block = gpd.read_file("Pune_Taluka_Web.geojson")
 
     return roads, hab, block
 
 
-roads, hab, block = load_data()# =====================================================
+roads, hab, block = load_data()
+
+# =====================================================
 # SIDEBAR FILTERS
 # =====================================================
 
